@@ -2,6 +2,7 @@ from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 from httpx import AsyncClient
 import uuid
+import asyncio
 
 
 router = APIRouter(prefix='/ingest', tags=["Ingestion"])
@@ -26,51 +27,78 @@ class IngestRequest(BaseModel):
     chunk_size: int = 500
 
 
-async def run_ingest(request: IngestRequest, job_id : str):
-    jobs[job_id] = {"status": "processing"}
+async def ingest_one(request: IngestRequest, client: AsyncClient):
 
+    chunk_response = await client.post(f"{CHUNKER_URL}/chunk",
+                                        json={
+                                            "content_text": request.content_text,
+                                            "metadata": request.metadata.model_dump(),
+                                            "filename": request.filename,
+                                            "chunk_size": request.chunk_size
+                                        }) 
+    chunk_data = chunk_response.json()
+    chunks = chunk_data["chunks"]
+    document_id = chunk_data["document_id"]
+
+
+    embed_response = await client.post(f"{EMBED_URL}/embed",
+                                        json={
+                                            "chunks" : chunks
+                                        })
+    
+    embed_chunks = embed_response.json()["chunks"]
+
+
+    await client.post(f"{STORE_URL}/store",
+                        json={"chunks": embed_chunks})
+
+    return {
+        "document_id": document_id,
+        "toatl_chunks": len(chunks),
+        "case_number": request.metadata.case_number,
+        "court": request.metadata.court
+    }
+    
+async def run_ingest_batch(requests: list[IngestRequest], job_id: str):
+    jobs[job_id] = {"status": "processing"}
     try:
         async with AsyncClient(timeout= 60) as client:
-            chunk_response = await client.post(f"{CHUNKER_URL}/chunk",
-                                               json={
-                                                   "content_text": request.content_text,
-                                                    "metadata": request.metadata.model_dump(),
-                                                    "filename": request.filename,
-                                                    "chunk_size": request.chunk_size
-                                               }) 
-            chunk_data = chunk_response.json()
-            chunks = chunk_data["chunks"]
-            document_id = chunk_data["document_id"]
+            jobs[job_id] = {"status": "processing"}
+            # run all cases in parallel
+            tasks = [ingest_one(req, client) for req in requests]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        # separte success from failures
 
-            embed_response = await client.post(f"{EMBED_URL}/embed",
-                                               json={
-                                                   "chunks" : chunks
-                                               })
-            
-            embed_chunks = embed_response.json()["chunks"]
+        completed = []
+        failed = []
+        for req , result in zip(requests,results):
+            if isinstance(result, Exception):
+                failed.append({
+                    "case_number": req.metadata.case_number,
+                    "error": str(result)
+                })
+            else:
+                completed.append(result)
+        jobs[job_id] = {
+            "status": "completed",
+            "total_cases": len(requests),
+            "succeded": len(completed),
+            "failed": len(failed),
+            "results": completed,
+            "errors": failed
+        }
 
-
-            await client.post(f"{STORE_URL}/store",
-                              json={"chunks": embed_chunks})
-
-            jobs[job_id] = {
-                "status": "completed",
-                "document_id": document_id,
-                "total_chunks": len(chunks),
-                "case_number": request.metadata.case_number,
-                "court": request.metadata.court
-            }
     except Exception as e:
         jobs[job_id] = {"status": "failed", "error": str(e)}
 
 
 @router.post('/')
-async def ingest(request: IngestRequest, background_tasks: BackgroundTasks):
+async def ingest(requests: list[IngestRequest], background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())
     jobs[job_id] = {"status": "queued"}
 
-    background_tasks.add_task(run_ingest, request, job_id)
+    background_tasks.add_task(run_ingest_batch, requests, job_id)
     return{
         "job_id": job_id,
         "status": "queued",

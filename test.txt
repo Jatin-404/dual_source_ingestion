@@ -1,0 +1,43 @@
+[
+  {
+    "content_text": "The plaintiff filed a complaint against the defendant alleging breach of contract on grounds of non-payment. The court reviewed all submitted evidence including transaction records. The defendant claimed the payment was delayed due to banking errors. The judge reserved judgment pending further verification.",
+    "metadata": {
+      "case_number": "CV-2024-00123",
+      "date": "2024-01-15",
+      "court": "Delhi High Court",
+      "lawyers": ["Advocate Sharma", "Advocate Mehta"]
+    },
+    "filename": "case_001.txt",
+    "chunk_size": 150
+  },
+  {
+    "content_text": "The accused was charged with fraudulent misrepresentation of financial documents. Prosecution presented bank statements showing irregular transfers. Defense counsel argued the transactions were legitimate business expenses. The court adjourned to allow both parties to submit additional evidence.",
+    "metadata": {
+      "case_number": "CR-2024-00456",
+      "date": "2024-02-20",
+      "court": "Bombay High Court",
+      "lawyers": ["Advocate Kapoor", "Advocate Singh"]
+    },
+    "filename": "case_002.txt",
+    "chunk_size": 150
+  },
+  {
+    "content_text": "Petitioner sought relief against unlawful termination of employment. Company argued termination was due to performance issues. Employee presented evidence of consistent positive appraisals. The labor court found in favor of the petitioner and ordered reinstatement.",
+    "metadata": {
+      "case_number": "LB-2024-00789",
+      "date": "2024-03-10",
+      "court": "Chennai Labor Court",
+      "lawyers": ["Advocate Rajan", "Advocate Nair"]
+    },
+    "filename": "case_003.txt",
+    "chunk_size": 150
+  }
+]
+
+
+
+QUERY
+{
+  "query": "fraudulent financial documents",
+  "court": "Bombay High Court"
+}
