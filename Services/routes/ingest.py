@@ -1,8 +1,9 @@
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, UploadFile, File, Form, HTTPException
 from pydantic import BaseModel
 from httpx import AsyncClient
 import uuid
 import asyncio
+import json
 
 
 router = APIRouter(prefix='/ingest', tags=["Ingestion"])
@@ -105,6 +106,59 @@ async def ingest(requests: list[IngestRequest], background_tasks: BackgroundTask
         "msg": "ingestion started in background"
     }
 
+@router.post("/upload")
+async def ingest_upload(
+    backgroud_tasks: BackgroundTasks,
+    content_file: UploadFile = File(...),
+    metadata_file: UploadFile = File(...),
+    chunk_size: int = Form(default=500)  # optional sent as form field
+):
+    # step-1 reading both files 
+    content_bytes = await content_file.read()     # what does await key word do here and is the info stored after reading in bytes?
+    metadata_bytes = await metadata_file.read()
+
+    # step-2 decode content file as plain text
+
+    try: 
+        content_text = content_bytes.decode("utf-8")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Content file must be valid UTF-8 text file")
+    
+    # step-3 parsing metadata file as json
+
+    try:
+        metadata_dict = json.loads(metadata_bytes.decode("utf-8"))
+        metadata = CaseMetadata(**metadata_dict)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Metadata file must be a valid JSON")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Metadata file missing fields: {str(e)}")
+    
+    # step-4 Build ingest request (same shape as before)
+
+    request = IngestRequest(
+        content_text=content_text,
+        metadata=metadata,
+        filename=content_file.filename,
+        chunk_size=chunk_size
+    )
+
+    # step 5 handoff to same background pipeline
+
+    job_id = str(uuid.uuid4())
+    jobs[job_id] = {"status": "queued"}
+    backgroud_tasks.add_task(run_ingest_batch, [request], job_id)
+
+    return{
+        "job_id": job_id,
+        "status": "queued",
+        "filename": content_file.filename,
+        "metadata_file": metadata_file.filename,
+        "msg": "File ingestion started in background"  
+    }
+
+
+
 
 @router.get('/jobs/{job_id}')
 async def get_job(job_id : str):
@@ -115,3 +169,4 @@ async def get_job(job_id : str):
             "job_id": job_id,
             **jobs[job_id]
         }
+    
