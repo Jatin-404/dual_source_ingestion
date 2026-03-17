@@ -6,7 +6,10 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.135.1",
+    "openpyxl>=3.1.5",
     "pydantic>=2.12.5",
+    "pymupdf>=1.27.2",
+    "python-docx>=1.2.0",
     "python-multipart>=0.0.22",
     "ruff>=0.15.6",
     "sentence-transformers>=5.3.0",
